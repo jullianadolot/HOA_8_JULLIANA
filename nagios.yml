@@ -1,0 +1,125 @@
+--- 
+
+- hosts: all
+  become: true
+  tasks:
+
+  - name: Install needed tools for Ubuntu
+    apt:
+      name:
+        - autoconf
+        - gcc
+        - libc6
+        - make
+        - wget
+        - unzip
+        - apache2
+        - apache2-utils
+        - php
+        - libgd-dev
+        - libmcrypt-dev
+        - bc
+        - gawk
+        - dc
+        - build-essential
+        - snmp
+        - libnet-snmp-perl
+        - gettext
+      state: latest
+    when: ansible_distribution == "Ubuntu"
+
+   - name: Install needed  tools for CentOS
+     yum:
+       name:
+         - vim
+         - gcc
+         - unzip
+         - httpd
+         - php
+         - gd-devel
+         - openssl-devel
+         - bc
+         - gawk
+         - net-snmp
+         - net-snmp-per1
+         - gettext
+       state: present
+     when: ansible_distribution == "CentOS"
+
+   - name: Downloading Nagios files for installation
+     unarchive:
+       src: https//assets.nagios.com/downloads/nagioscore/releases/nagios-4.4.6.tar.gz
+       dest: /tmp
+       remote_src: yes
+   
+   - name: Create Nagios user
+     user: 
+       name: nagios
+       shell: /bin/bash
+       create_home: yes
+
+   - name: Create Nagios group
+     group:
+       name: nagios
+
+   - name: Add Nagios user to group
+     user:
+       name: nagios
+       groups: nagcmd
+       append: yes
+   
+   - name: Add Ubuntu Apache to the group
+     user:
+       name: "www-data"
+       groups: nagcmd
+       append: yes
+     when: ansible_distribution == "Ubuntu"
+
+   - name: Add CentOS Apache to the group
+     user:
+       name: "apache"
+       groups: nagcmd
+       append: yes
+     when: ansible_distribution == "CentOS"
+
+   - name: Installing Nagios
+     shell:
+       cd /tmp/nagios-4.4.6
+       ./configure --with-nagios-group=nagios --with-command-group=nagcmd
+       make all
+       make install
+       make install-commandmode
+       make install-init
+       make install-config
+
+   - name: Installing Nagios in Ubuntu Apache
+     copy:
+       src: /tmp/nagios-4.4.6/sample-config/httpd.conf
+       dest: /etc/apache2/sites-available/nagios.conf
+       mode: '0644'
+       remote_src: yes
+     when: ansible_distribution == "Ubuntu"
+    
+   - name: Install Nagios plugins in Ubuntu
+     apt:
+       name: nagios-plugins
+       state: latest
+     when: ansible_distribution == "Ubuntu"
+
+   - name: Install Nagios plugins in CentOS
+     dnf:
+       name: nagios-plugins-all
+       state: latest
+     when: ansible_distribution == "CentOS"
+
+   - name: Enable and Start services in Ubuntu
+     systemd:
+       name: "{{item}}"
+       enabled: yes
+       state: restarted
+     loop:
+       - nagios
+       - httpd
+     when: ansible_distribution == "CentOS"
+
+
